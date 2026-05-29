@@ -74,7 +74,7 @@ export const getProductReviews = async (req: Request, res: Response): Promise<vo
  */
 export const createReview = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { productId } = req.params;
+    const productId = req.params.productId as string;
     const { rating, comment } = req.body;
 
     // Verificar que el producto exista
