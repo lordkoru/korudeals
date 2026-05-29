@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  body {
+    @apply bg-koru-50 text-gray-900 antialiased;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-koru-600 hover:bg-koru-700 text-white font-semibold py-2.5 px-6 rounded-lg transition-colors;
+  }
+  .btn-secondary {
+    @apply bg-white hover:bg-koru-100 text-koru-700 border border-koru-300 font-semibold py-2.5 px-6 rounded-lg transition-colors;
+  }
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-koru-200 rounded-lg focus:ring-2 focus:ring-koru-400 focus:border-transparent outline-none transition;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-koru-100 hover:shadow-md transition-shadow;
+  }
+}
