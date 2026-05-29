@@ -3,12 +3,13 @@
  * Solo accesible para usuarios con rol 'administrador'.
  */
 import { useState } from "react";
-import { useGetProducts, useCreateProduct, useDeleteProduct } from "@/api/ProductApi";
+import { useGetProducts, useCreateProduct, useDeleteProduct, useUpdateProduct } from "@/api/ProductApi";
 import { useGetAllOrders, useUpdateOrderStatus } from "@/api/OrderApi";
 import { useGetMyUser } from "@/api/UserApi";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
-import { Trash2, Plus, Package, ShoppingBag } from "lucide-react";
+import { Trash2, Plus, Package, ShoppingBag, Pencil, X } from "lucide-react";
+import { Product } from "@/types";
 
 const AdminDashboardPage = () => {
   const [tab, setTab] = useState<"products" | "orders">("products");
@@ -59,46 +60,145 @@ const AdminDashboardPage = () => {
   );
 };
 
+/** Tipo compartido para el estado del formulario de producto */
+type ProductForm = {
+  name: string;
+  brand: string;
+  description: string;
+  price: number;
+  sizes: string;
+  colors: string;
+  stock: number;
+  imageUrl: string;
+  category: string;
+};
+
+const EMPTY_FORM: ProductForm = {
+  name: "",
+  brand: "",
+  description: "",
+  price: 0,
+  sizes: "25,26,27",
+  colors: "Negro,Blanco",
+  stock: 10,
+  imageUrl: "https://placehold.co/400x400/d97338/fff?text=Tenis",
+  category: "casual",
+};
+
+/** Campos del formulario reutilizados en crear y editar */
+const ProductFormFields = ({
+  form,
+  setForm,
+  isPending,
+  submitLabel,
+  onCancel,
+}: {
+  form: ProductForm;
+  setForm: (f: ProductForm) => void;
+  isPending: boolean;
+  submitLabel: string;
+  onCancel: () => void;
+}) => (
+  <div className="grid md:grid-cols-2 gap-3">
+    <input className="input-field" placeholder="Nombre" required value={form.name}
+      onChange={(e) => setForm({ ...form, name: e.target.value })} />
+    <input className="input-field" placeholder="Marca" required value={form.brand}
+      onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+    <textarea className="input-field md:col-span-2" placeholder="Descripción" required
+      value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+    <input className="input-field" type="number" placeholder="Precio" required value={form.price}
+      onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+    <input className="input-field" type="number" placeholder="Stock" required value={form.stock}
+      onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
+    <input className="input-field" placeholder="Tallas (separadas por coma)" required
+      value={form.sizes} onChange={(e) => setForm({ ...form, sizes: e.target.value })} />
+    <input className="input-field" placeholder="Colores (separados por coma)" required
+      value={form.colors} onChange={(e) => setForm({ ...form, colors: e.target.value })} />
+    <input className="input-field md:col-span-2" placeholder="URL de imagen" required
+      value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+    <select className="input-field" value={form.category}
+      onChange={(e) => setForm({ ...form, category: e.target.value })}>
+      <option value="casual">Casual</option>
+      <option value="deportivo">Deportivo</option>
+      <option value="urbano">Urbano</option>
+      <option value="running">Running</option>
+      <option value="skate">Skate</option>
+    </select>
+    <div className="md:col-span-2 flex gap-2">
+      <button type="submit" className="btn-primary flex-1" disabled={isPending}>
+        {isPending ? "Guardando..." : submitLabel}
+      </button>
+      <button type="button" onClick={onCancel}
+        className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+        <X className="w-4 h-4" /> Cancelar
+      </button>
+    </div>
+  </div>
+);
+
 /** Sub-componente: gestión de productos */
 const ProductsPanel = () => {
   const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
+  const [editForm, setEditForm] = useState<ProductForm>(EMPTY_FORM);
+
   const { data, isLoading } = useGetProducts({ limit: 50 });
   const createProduct = useCreateProduct();
+  const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
-  const [form, setForm] = useState({
-    name: "",
-    brand: "",
-    description: "",
-    price: 0,
-    sizes: "25,26,27",
-    colors: "Negro,Blanco",
-    stock: 10,
-    imageUrl: "https://placehold.co/400x400/d97338/fff?text=Tenis",
-    category: "casual"
+  const parseForm = (f: ProductForm) => ({
+    name: f.name,
+    brand: f.brand,
+    description: f.description,
+    price: Number(f.price),
+    sizes: f.sizes.split(",").map((s) => Number(s.trim())),
+    colors: f.colors.split(",").map((c) => c.trim()),
+    stock: Number(f.stock),
+    imageUrl: f.imageUrl,
+    category: f.category as Product["category"],
   });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    createProduct.mutate(
-      {
-        name: form.name,
-        brand: form.brand,
-        description: form.description,
-        price: Number(form.price),
-        sizes: form.sizes.split(",").map((s) => Number(s.trim())),
-        colors: form.colors.split(",").map((c) => c.trim()),
-        stock: Number(form.stock),
-        imageUrl: form.imageUrl,
-        category: form.category as any
+    createProduct.mutate(parseForm(form), {
+      onSuccess: () => {
+        toast.success("Producto creado");
+        setShowForm(false);
+        setForm(EMPTY_FORM);
       },
+      onError: () => toast.error("Error al crear producto"),
+    });
+  };
+
+  const handleEditClick = (product: Product) => {
+    setEditingProduct(product);
+    setEditForm({
+      name: product.name,
+      brand: product.brand,
+      description: product.description,
+      price: product.price,
+      sizes: product.sizes.join(","),
+      colors: product.colors.join(","),
+      stock: product.stock,
+      imageUrl: product.imageUrl,
+      category: product.category,
+    });
+    setShowForm(false);
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    updateProduct.mutate(
+      { id: editingProduct._id, data: parseForm(editForm) },
       {
         onSuccess: () => {
-          toast.success("Producto creado");
-          setShowForm(false);
-          setForm({ ...form, name: "", brand: "", description: "" });
+          toast.success("Producto actualizado");
+          setEditingProduct(null);
         },
-        onError: () => toast.error("Error al crear producto")
+        onError: () => toast.error("Error al actualizar producto"),
       }
     );
   };
@@ -107,7 +207,7 @@ const ProductsPanel = () => {
     if (!confirm("¿Eliminar este producto del catálogo?")) return;
     deleteProduct.mutate(id, {
       onSuccess: () => toast.success("Producto eliminado"),
-      onError: () => toast.error("Error al eliminar")
+      onError: () => toast.error("Error al eliminar"),
     });
   };
 
@@ -116,7 +216,7 @@ const ProductsPanel = () => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Productos del catálogo</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setEditingProduct(null); }}
           className="btn-primary inline-flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> Nuevo producto
@@ -124,34 +224,30 @@ const ProductsPanel = () => {
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="card p-6 mb-6 grid md:grid-cols-2 gap-3">
-          <input className="input-field" placeholder="Nombre" required value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input className="input-field" placeholder="Marca" required value={form.brand}
-            onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-          <textarea className="input-field md:col-span-2" placeholder="Descripción" required
-            value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <input className="input-field" type="number" placeholder="Precio" required value={form.price}
-            onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
-          <input className="input-field" type="number" placeholder="Stock" required value={form.stock}
-            onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} />
-          <input className="input-field" placeholder="Tallas (separadas por coma)" required
-            value={form.sizes} onChange={(e) => setForm({ ...form, sizes: e.target.value })} />
-          <input className="input-field" placeholder="Colores (separados por coma)" required
-            value={form.colors} onChange={(e) => setForm({ ...form, colors: e.target.value })} />
-          <input className="input-field md:col-span-2" placeholder="URL de imagen" required
-            value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
-          <select className="input-field" value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            <option value="casual">Casual</option>
-            <option value="deportivo">Deportivo</option>
-            <option value="urbano">Urbano</option>
-            <option value="running">Running</option>
-            <option value="skate">Skate</option>
-          </select>
-          <button type="submit" className="btn-primary md:col-span-2" disabled={createProduct.isPending}>
-            {createProduct.isPending ? "Creando..." : "Guardar producto"}
-          </button>
+        <form onSubmit={handleCreate} className="card p-6 mb-6">
+          <h3 className="font-semibold text-lg mb-4">Nuevo producto</h3>
+          <ProductFormFields
+            form={form}
+            setForm={setForm}
+            isPending={createProduct.isPending}
+            submitLabel="Guardar producto"
+            onCancel={() => setShowForm(false)}
+          />
+        </form>
+      )}
+
+      {editingProduct && (
+        <form onSubmit={handleUpdate} className="card p-6 mb-6 border-2 border-koru-300">
+          <h3 className="font-semibold text-lg mb-4">
+            Editando: <span className="text-koru-700">{editingProduct.name}</span>
+          </h3>
+          <ProductFormFields
+            form={editForm}
+            setForm={setEditForm}
+            isPending={updateProduct.isPending}
+            submitLabel="Guardar cambios"
+            onCancel={() => setEditingProduct(null)}
+          />
         </form>
       )}
 
@@ -172,19 +268,30 @@ const ProductsPanel = () => {
             </thead>
             <tbody>
               {data?.data.map((p) => (
-                <tr key={p._id} className="border-t border-koru-50">
+                <tr key={p._id}
+                  className={`border-t border-koru-50 transition ${editingProduct?._id === p._id ? "bg-koru-50" : ""}`}>
                   <td className="p-3 font-medium">{p.name}</td>
                   <td className="p-3 text-gray-600">{p.brand}</td>
                   <td className="p-3">{formatPrice(p.price)}</td>
                   <td className="p-3">{p.stock}</td>
                   <td className="p-3">⭐ {p.averageRating.toFixed(1)} ({p.reviewCount})</td>
                   <td className="p-3 text-right">
-                    <button
-                      onClick={() => handleDelete(p._id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => handleEditClick(p)}
+                        className="text-koru-600 hover:text-koru-800"
+                        title="Editar producto"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(p._id)}
+                        className="text-red-500 hover:text-red-700"
+                        title="Eliminar producto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
